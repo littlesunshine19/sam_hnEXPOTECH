@@ -133,21 +133,37 @@ class _RiverLevelChartPainter extends CustomPainter {
     required this.fillColor,
   });
 
-  @override
+     @override
   void paint(Canvas canvas, Size size) {
     final allPoints = [...history, ...projection];
-    if (allPoints.isEmpty) return;
+    
+    // 1. Validar que existan datos para evitar errores
+    if (allPoints.isEmpty) {
+      _drawNoDataMessage(canvas, size);
+      return;
+    }
 
     final range = maxLevel - minLevel;
+    
+    // 2. Evitar división por cero (NaN) si el rango es inválido
+    if (range <= 0) {
+      _drawNoDataMessage(canvas, size, message: 'Rango de datos inválido');
+      return;
+    }
+
     final leftPadding = 40.0;
     final rightPadding = 10.0;
     final topPadding = 10.0;
     final bottomPadding = 25.0;
-    final chartWidth = size.width - leftPadding - rightPadding;
-    final chartHeight = size.height - topPadding - bottomPadding;
+    
+    // 3. Proteger contra dimensiones negativas si el widget se comprime demasiado
+    final chartWidth = (size.width - leftPadding - rightPadding).clamp(0.0, double.infinity);
+    final chartHeight = (size.height - topPadding - bottomPadding).clamp(0.0, double.infinity);
 
-    // Dibujar líneas de referencia horizontales
-    final referenceLevels = [minLevel, 0.5, 0.8, 1.2, maxLevel];
+    if (chartWidth <= 0 || chartHeight <= 0) return;
+
+    // 4. Usar un Set para evitar líneas de referencia duplicadas y ordenarlas
+    final referenceLevels = {minLevel, 0.5, 0.8, 1.2, maxLevel}.toList()..sort();
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.15)
       ..strokeWidth = 1;
@@ -159,6 +175,7 @@ class _RiverLevelChartPainter extends CustomPainter {
 
     for (final level in referenceLevels) {
       if (level < minLevel || level > maxLevel) continue;
+      
       final y = topPadding + chartHeight - ((level - minLevel) / range) * chartHeight;
 
       canvas.drawLine(
@@ -168,34 +185,37 @@ class _RiverLevelChartPainter extends CustomPainter {
       );
 
       textPainter.text = TextSpan(
-        text: '$level m',
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.6),
+        // 5. Formato consistente de 1 decimal para el eje Y
+        text: '${level.toStringAsFixed(1)} m', 
+        style: const TextStyle(
+          color: Colors.white54, // Más limpio y performante que withOpacity(0.6)
           fontSize: 11,
         ),
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(0, y - 7));
+      // 6. Centrada verticalmente con la línea, sin números mágicos como 'y - 7'
+      textPainter.paint(canvas, Offset(0, y - (textPainter.height / 2)));
     }
 
     // Etiquetas del eje X
-    textPainter.text = TextSpan(
+    textPainter.text = const TextSpan(
       text: '48h',
-      style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+      style: TextStyle(color: Colors.white54, fontSize: 11),
     );
     textPainter.layout();
-    textPainter.paint(canvas, Offset(leftPadding, size.height - 18));
+    textPainter.paint(canvas, Offset(leftPadding, size.height - bottomPadding + 5));
 
-    textPainter.text = TextSpan(
-      text: 'ahora',
-      style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+    textPainter.text = const TextSpan(
+      text: 'Ahora',
+      style: TextStyle(color: Colors.white54, fontSize: 11),
     );
     textPainter.layout();
-    textPainter.paint(canvas, Offset(size.width - rightPadding - 40, size.height - 18));
+    textPainter.paint(canvas, Offset(size.width - rightPadding - 40, size.height - bottomPadding + 5));
 
-    // Función para convertir punto a offset
+    // 7. Función segura: evita división por cero si total == 1
     Offset pointToOffset(RiverLevelPoint point, int index, int total) {
-      final x = leftPadding + (index / (total - 1)) * chartWidth;
+      final xRatio = total > 1 ? (index / (total - 1)) : 0.0;
+      final x = leftPadding + xRatio * chartWidth;
       final y = topPadding + chartHeight - ((point.levelMeters - minLevel) / range) * chartHeight;
       return Offset(x, y);
     }
@@ -260,7 +280,8 @@ class _RiverLevelChartPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
-      final startIndex = history.length - 1;
+      // 8. Manejo seguro si history está vacío (fallback a 0)
+      final startIndex = history.isEmpty ? 0 : history.length - 1;
       final path = Path();
       final firstOffset = pointToOffset(projection.first, startIndex, allPoints.length);
       path.moveTo(firstOffset.dx, firstOffset.dy);
@@ -271,8 +292,8 @@ class _RiverLevelChartPainter extends CustomPainter {
       }
 
       // Dibujar con efecto punteado
-      final dashLength = 6.0;
-      final gapLength = 4.0;
+      const dashLength = 6.0; // 9. Uso de 'const' para micro-optimización
+      const gapLength = 4.0;
       final metrics = path.computeMetrics();
       for (final metric in metrics) {
         double distance = 0;
@@ -304,8 +325,28 @@ class _RiverLevelChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RiverLevelChartPainter oldDelegate) {
+    // 10. Verificación completa: antes faltaban maxLevel, minLevel y colores
     return oldDelegate.currentLevel != currentLevel ||
         oldDelegate.history != history ||
-        oldDelegate.projection != projection;
+        oldDelegate.projection != projection ||
+        oldDelegate.maxLevel != maxLevel ||
+        oldDelegate.minLevel != minLevel ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.fillColor != fillColor;
   }
-}
+
+  // Método auxiliar para mantener el código limpio
+  void _drawNoDataMessage(Canvas canvas, Size size, {String message = 'Sin datos disponibles'}) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: message,
+        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 14),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas, 
+      Offset((size.width - textPainter.width) / 2, (size.height - textPainter.height) / 2),
+    );
+  }
