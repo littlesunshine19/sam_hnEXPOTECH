@@ -19,8 +19,10 @@ class RiverInfoCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
+    Widget build(BuildContext context) {
+    return Semantics(
+       label: '$label: $value $unit. $subtitle',
+       child: Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
@@ -28,6 +30,9 @@ class RiverInfoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: color.withOpacity(0.3), width: 1),
       ),
+         ),
+    );
+  }
       child: Row(
         children: [
           Container(
