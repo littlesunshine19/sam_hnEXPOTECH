@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'enums/river_status.dart';
 import 'models/river_monitoring_data.dart';
 import 'screens/monitoring_screen.dart';
+import 'data/mock_data.dart'; 
 
 void main() {
   runApp(const SAMHNApp());
