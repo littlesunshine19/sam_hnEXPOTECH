@@ -1,19 +1,71 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/status_theme.dart';
 import '../enums/river_status.dart';
 
-class EvacuationTimer extends StatelessWidget {
-  final Duration remainingTime;
+class EvacuationTimer extends StatefulWidget {
+  final Duration initialTime;
   final RiverStatus status;
 
   const EvacuationTimer({
     super.key,
-    required this.remainingTime,
+    required this.initialTime,
     required this.status,
   });
 
+  @override
+  State<EvacuationTimer> createState() => _EvacuationTimerState();
+}
+
+class _EvacuationTimerState extends State<EvacuationTimer> {
+  late Duration _remainingTime;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingTime = widget.initialTime;
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(EvacuationTimer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si el estado o el tiempo inicial cambian desde el padre (ej. al tocar un botón de prueba),
+    // reiniciamos el temporizador automáticamente.
+    if (oldWidget.initialTime != widget.initialTime || oldWidget.status != widget.status) {
+      setState(() {
+        _remainingTime = widget.initialTime;
+      });
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    
+    // No iniciar el timer si el estado es estable
+    if (widget.status == RiverStatus.stable) return;
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_remainingTime.inSeconds > 0) {
+        setState(() {
+          _remainingTime -= const Duration(seconds: 1);
+        });
+      } else {
+        _timer?.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel(); // 1. Crucial: evita memory leaks al destruir el widget
+    super.dispose();
+  }
+
   String _formatDuration(Duration duration) {
-    if (duration.isNegative) {
+    if (duration.isNegative || duration.inSeconds == 0) {
       return '00:00:00';
     }
     final hours = duration.inHours.toString().padLeft(2, '0');
@@ -24,7 +76,7 @@ class EvacuationTimer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = StatusTheme.fromStatus(status);
+    final theme = StatusTheme.fromStatus(widget.status);
 
     return Column(
       children: [
@@ -56,13 +108,15 @@ class EvacuationTimer extends StatelessWidget {
             ],
           ),
           child: Text(
-            _formatDuration(remainingTime),
-            style: TextStyle(
+            _formatDuration(_remainingTime), // 2. Usa el estado local, no el del padre
+            style: const TextStyle(
               fontSize: 72,
               fontWeight: FontWeight.w900,
               color: Colors.white,
               fontFamily: 'monospace',
               letterSpacing: 6,
+              height: 1.0, // 3. Mejora la alineación vertical del texto monoespaciado
+            ).copyWith(
               shadows: [
                 Shadow(
                   color: theme.glowColor.withOpacity(0.8),
